@@ -1,53 +1,75 @@
 package grater
+
 // Copyright 2018 The Glen Newton. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
 import (
-	"log"
-	"time"
+	"bufio"
 	"errors"
+	"log"
+	"strconv"
+	"time"
 )
 
 type Grater struct {
-     ticker *time.Ticker
-     name string
+	ticker *time.Ticker
+	name   string
+	writer *bufio.Writer
+	outFunc      outFunc
 }
 
-// TODO
-func NewFileGrater(d time.Duration, counter *uint64, filename string) *Grater{
-     return nil
-}    
 
+func NewFileGrater(d time.Duration, counter *uint64, w *bufio.Writer) (*Grater, error) {
+	return graterInit(d, counter, writerOut, w)
+}
 
+func NewGrater(d time.Duration, counter *uint64) (*Grater, error) {
+	return graterInit(d, counter, logOut, nil)
+}
 
-func NewGrater(d time.Duration, counter *uint64) (*Grater, error){
-     if counter == nil {
-     		return nil, errors.New("Error: Counter is nil")
-     }
+func (r *Grater) Stop() {
+	r.ticker.Stop()
+}
 
-     if int64(d) <= 0 {
-     	return nil, errors.New("Error: Duration must be >0")
-     }    
-	var previousCounter uint64 = 0
-	rater := new(Grater)
+func graterInit(d time.Duration, counter *uint64, o outFunc, w *bufio.Writer) (*Grater, error) {
+	if counter == nil {
+		return nil, errors.New("Error: Counter is nil")
+	}
+
+	if int64(d) <= 0 {
+		return nil, errors.New("Error: Duration must be >0")
+	}
+
+	if o == nil{
+		return nil, errors.New("outFunc is nil")
+	}
 	
-	rater.ticker = time.NewTicker(d)
+	grater := new(Grater)
+	grater.outFunc = o
+	grater.writer = w
+	grater.ticker = time.NewTicker(d)
 
-	go func() {
-		log.Println("Grater: START")	
-		for _ = range rater.ticker.C {
-			log.Println("Grater:", *counter-previousCounter)
-			previousCounter = *counter
+	go counterTicker(grater, counter)
+
+	return grater, nil
+}
+
+
+func counterTicker(r *Grater, counter *uint64) {
+	if r == nil || counter == nil {
+		log.Fatal("Grater or counter are nil")
+	}
+
+	var previousCounter uint64 = 0
+
+	for _ = range r.ticker.C {
+		err := r.outFunc(r, strconv.FormatUint(*counter-previousCounter, 10))
+		if err != nil{
+			log.Fatal("Grater or counter are nil")
 		}
-		log.Println("Grater: END")		
-	}()
-	return rater, nil
-}
+		previousCounter = *counter
+	}
 
-func (r *Grater)Stop(){
-     r.ticker.Stop()
-     log.Println("Grater: STOP")	
 }
-
 
